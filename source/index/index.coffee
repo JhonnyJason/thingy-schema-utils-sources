@@ -225,140 +225,6 @@ createObjectValidator = (obj) ->
 
 #endregion
 
-############################################################
-#region Stringifier Creation Helpers
-getTypeStringifier = (type) ->
-    fun = typeStringifierFunctions[type]
-    if !fun? then throw new Error("Unrecognized Schematype! (#{type})")
-    return fun
-
-############################################################
-getTypeStringifiersForArray = (arr) ->
-    ts = new Array(arr.length) ## type stringifiers
-    
-    for el,i in arr
-        type = typeof el
-        if type == "number" then ts[i] = getTypeStringifier(el)
-        if type == "string" then ts[i] = getTypeStringifier(STRING)
-        if type != "object" then continue
-        if Array.isArray(el) then ts[i] = createArrayStringifier(el)
-        else ts[i] = createObjectStringifier(el)
-
-    return ts
-
-getStringifierEntriesForObject = (obj) ->
-    keys = Object.keys(obj)
-    ses = new Array(keys.length) # stringifier entries 
-    
-    for k,i in keys
-        prop = obj[k]
-        type = typeof prop
-        if type == "number" then ses[i] = [k, getTypeStringifier(prop)]
-        if type == "string" then ses[i] = [k, getTypeStringifier(STRING)]
-        if type != "object" then continue
-        if Array.isArray(prop)
-            sfes[i] = [k, createArrayStringifier(prop)] 
-        else ses[i] = [k, createObjectStringifier(prop)] 
-
-    return ses
-
-############################################################
-createArrayStringifier = (arr) ->
-    stringifyFunctions = getTypeStringifiersForArray(arr)
-    bufLen = stringifyFunctions.length
-    buffer = new Array(bufLen)
-
-    func = (arg) ->
-        ## stringify contents with predefined functions
-        buffer[i] = f(arg[i]) for f,i in stringifyFunctions
-
-        ## cut off undefined tail
-        while (buffer[buffer.length - 1] == undefined and buffer.length != 0)
-            buffer.pop()
-
-        ## fast return on no content
-        if buffer.length == 0
-            buffer.length = bufLen # restore original size
-            return '[]' 
-
-        # undefined within the array turns to 'null'
-        for s,i in buffer when s == undefined
-            buffer[i] = 'null'
-
-        str = '['+ buffer[0]
-        i = 1
-        str += ','+buffer[i++] while(i < buffer.length)
-        
-        buffer.length = bufLen # restore original size
-        str += ']'
-        return str 
-
-    return func
-
-createObjectStringifier = (obj) ->
-    sfEntries = getStringifierEntriesForObject(obj) # stringifer entries
-    bufLen = sfEntries.length
-    buffer = new Array(bufLen)
-
-    func = (arg) ->
-        buffer[i] = el[1](arg[el[0]]) for el,i in sfEntries 
-
-        # log "0"
-        str = '{'
-        i = 0
-        
-        while str.length == 1 and i < bufLen 
-            str += '"'+sfEntries[i][0]+'":'+buffer[i] if buffer[i]?
-            i++
-        
-        # log "1"
-        while i < bufLen
-            str += ',"'+sfEntries[i][0]+'":'+buffer[i] if buffer[i]?
-            i++
-
-        # log "2"
-        str += '}'
-        return str
-
-    return func
-
-#endregion
-
-############################################################
-#region Raw Type Stringifier Functions
-booleanStringify = (arg) ->
-    if arg  then return 'true' else return 'false'
-booleanOrNothingStringify = (arg) ->
-    return arg if arg == undefined 
-    if arg then return 'true'  else return 'false'
-booleanOrNullStringify = (arg) ->
-    return 'null' if arg == null
-    if arg then return 'true' else return 'false'
-numberStringify = (arg) -> ''+arg
-numberOrNothingStringify = (arg) -> 
-    if arg == undefined then return arg else return ''+arg
-numberOrNullStringify = (arg) ->
-    if arg == null then return 'null' else return ''+arg
-stringStringify = (arg) ->
-    if arg.length > 67 then return JSON.stringify(arg)
-    i = 0
-    while i < arg.length
-        code = arg.charCodeAt(i)
-        if (code < 93 and (code < 0x20 or code == 0x5c or code == 0x22))
-            return JSON.stringify(arg)
-        i++
-    return '"'+arg+'"'
-stringOrNothingStringify = (arg) ->
-    if arg == undefined then return arg else return stringStringify(arg)
-stringOrNullStringify = (arg) ->
-    if arg == null then return 'null' else return stringStringify(arg)
-objectStringify = JSON.stringify
-objectOrNothingStringify = (arg) ->
-    if arg == undefined then return arg else return JSON.stringify(arg)
-#TODO? maybe create specific Array Stringify function?
-
-#endregion
-
 #endregion
 
 ############################################################
@@ -756,64 +622,6 @@ typeValidatorFunctions[OBJECTCLEANORNOTHING] = (arg) ->
 #endregion
 
 ############################################################
-#region Stringifier Functions
-typeStringifierFunctions = new Array(typeArraySize)
-
-############################################################
-#region Stringify Functions for Schema Types
-typeStringifierFunctions[STRING] = stringStringify
-typeStringifierFunctions[STRINGEMAIL] = stringStringify
-typeStringifierFunctions[STRINGHEX] = stringStringify
-typeStringifierFunctions[STRINGHEX32] = stringStringify
-typeStringifierFunctions[STRINGHEX64] = stringStringify
-typeStringifierFunctions[STRINGHEX128] = stringStringify
-typeStringifierFunctions[STRINGHEX256] = stringStringify
-typeStringifierFunctions[STRINGHEX512] = stringStringify
-typeStringifierFunctions[NUMBER] = numberStringify
-typeStringifierFunctions[BOOLEAN] = booleanStringify
-typeStringifierFunctions[ARRAY] = objectStringify
-typeStringifierFunctions[OBJECT] = objectStringify
-typeStringifierFunctions[STRINGORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGEMAILORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGHEXORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGHEX32ORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGHEX64ORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGHEX128ORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGHEX256ORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[STRINGHEX512ORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[NUMBERORNOTHING] = numberOrNothingStringify
-typeStringifierFunctions[BOOLEANORNOTHING] = booleanOrNothingStringify
-typeStringifierFunctions[ARRAYORNOTHING] = objectOrNothingStringify
-typeStringifierFunctions[OBJECTORNOTHING] = objectOrNothingStringify
-typeStringifierFunctions[STRINGORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGEMAILORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGHEXORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGHEX32ORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGHEX64ORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGHEX128ORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGHEX256ORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGHEX512ORNULL] = stringOrNullStringify
-typeStringifierFunctions[NUMBERORNULL] = numberOrNullStringify
-typeStringifierFunctions[BOOLEANORNULL] = booleanOrNullStringify
-typeStringifierFunctions[ARRAYORNULL] = objectStringify
-typeStringifierFunctions[NONNULLOBJECT] =  objectStringify 
-typeStringifierFunctions[NONEMPTYSTRING] = stringStringify
-typeStringifierFunctions[NONEMPTYARRAY] = objectStringify
-typeStringifierFunctions[NONEMPTYSTRINGHEX] = stringStringify
-typeStringifierFunctions[NONEMPTYSTRINGCLEAN] = stringStringify
-typeStringifierFunctions[STRINGCLEAN] = stringStringify
-typeStringifierFunctions[STRINGCLEANORNULL] = stringOrNullStringify
-typeStringifierFunctions[STRINGCLEANORNOTHING] = stringOrNothingStringify
-typeStringifierFunctions[OBJECTCLEAN] = objectStringify
-typeStringifierFunctions[NONNULLOBJECTCLEAN] = objectStringify
-typeStringifierFunctions[OBJECTCLEANORNOTHING] = objectStringify
-
-#endregion
-
-#endregion
-
-
-############################################################
 #region Error Codes and Messages
 export NOTASTRING = 1000
 export NOTANUMBER = 1001
@@ -863,6 +671,12 @@ ErrorToMessage[ISINVALID] = "Is invalid!"
 ############################################################
 #region API = exports
 
+############################################################
+## takes obj to be validated, schema and optional boolean staticStrings
+##    a truthy staticStrings allows you to put static 
+##    strings into your schema like: 
+##    {userInpput: STRING, publicAccess: "onlywithexactlythisstring"}
+## returns undefined if the obj is valid or the errorCode on invalid obj
 export validate = (obj, schema, staticStrings) ->
     if staticStrings == true
         staticValidatorOrThrow = createStaticStringValidator
@@ -905,15 +719,14 @@ export getErrorMessage = (errorCode) ->
     else return msg
 
 ############################################################
-## takes a validatorFunction and getTypeStringifier
+## takes a validatorFunction
 ##    this function cannot overwrite predefined types 
 ## returns the new enumeration number for the defined Type
-export defineNewType = (validatorFunc, stringifyFunc) ->
+export defineNewType = (validatorFunc) ->
     if locked then throw new Error("We are closed!")    
     newTypeId = typeValidatorFunctions.length
     if newTypeId >= 1000 then throw new Error("Exeeding type limit!")
     typeValidatorFunctions[newTypeId] = validatorFunc
-    typeStringifierFunctions[newTypeId] = stringifyFunc
     return newTypeId
 
 ############################################################
@@ -929,10 +742,10 @@ export defineNewError = (errorMessage) ->
     return errorCode
 
 ############################################################
-## takes a type, validatorFunc and stringifyFunc
-##     sets the specified functions as validator and stringifier 
-##     for the given type
-export setTypeFunctions = (type, valiatorFunc, stringifyFunc) ->
+## takes a type and validatorFunc
+##     sets the specified functions as validator for the 
+##     given type
+export setTypeValidator = (type, valiatorFunc) ->
     if locked then throw new Error("We are closed!")
     if typeof type != "number" then throw new Error("type is not a Number!")
     if type >= typeValidatorFunctions.length or type < 1 
@@ -940,14 +753,10 @@ export setTypeFunctions = (type, valiatorFunc, stringifyFunc) ->
     
     if valiatorFunc?  and typeof valiatorFunc  != "function" 
         throw new Error("validatorFunc is not a Function!")
-    if stringifyFunc? and typeof stringifyFunc  != "function" 
-        throw new Error("stringifyFunc is not a Function!")
 
     if validatorFunction? then typeValidatorFunctions[type] = validatorFunc
     else typeValidatorFunctions[type] = () -> return
 
-    if stringifyFunc? then typeStringifierFunctions[type] = stringifyFunc
-    else typeStringifierFunctions[type] = () -> ""
     return 
 
 ############################################################
