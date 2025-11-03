@@ -1,22 +1,23 @@
 # thingy-schema-utils 
-A lightweight, zero-dependency utility for precompiling stringifiers and validators for your structured data in JavaScript. Define your Schema in the most simple and non-verbose way and efficiently validate and stringify them.
+A lightweight, zero-dependency utility for precompiling validators for your structured data in JavaScript. Define your Schema in the most simple and non-verbose and validate them conveniently.
 
 Supports a wide range of common data types, including strings, numbers, booleans, arrays, objects, and specialized formats like hex strings and emails. + Gives you the power to create new types as well.
 
 # Background
-When working on my Service Communication Interface(SCI)-mechanics inspiration to improve on the [thingy-schema-validate](https://www.npmjs.com/package/thingy-schema-validate) hit. 
-Despite never running into performance issues, it was obvious that the execution relying on in-time lookups and throwing exceptions had massive improvement potential.
+When working on my Service Communication Interface(SCI)-mechanics the need to validate the inputs and outputs arose. As other tools that would fit the purpose are too verbose and complex to define the schemas this is the simplemost version of it - or judge by yourself ;-).
 
-For improving said SCI-mechanics I started to reduce my reliance on throwing exceptions everywhere. Also some nice AI told me that JSON.stringify is relatively slow and that fastify uses [AJV](https://www.npmjs.com/package/ajv) under the hood to compile stringifier functions for SCI responses which significantly improves performance. 
-
-Thus `thingy-schema-utils` was born for gaining same benefits but keeping the nice simple schema definitions from `thingy-schema-validate`.
+Latest updates (v0.0.5 -> v0.0.6 = complete rewrite):
+- New base-types e.g. `STRINGEMAIL`, `STRINGCLEAN` and `OBJECTCLEAN`
+- Optional types that can be non-existent e.g. `mySchema = { user: STRINGCLEAN, isAdmin: BOOLEANORNOTHING }`
+- Arbitrarily nested schemas
+- Schema can be a different base-type now e.g. `mySchema = STRING` or `mySchema = [ NUMBER, STRING ]` 
+- Precompilation of validator functions for improved efficiency (+30%)
+- Return a string instead of throwing an exception when invalid -> 4-8 time faster
 
 ## Features
 - **Nice Schema Definitions**: Write schemas which don't mess up your code.
-- **Fast Schema Validation**: Precompile the validator function once from your schema. Validate your data efficiently for the rest of your programs runtime.
-- **Fast Stringification**: Precompile the stringifier function once from your schema. Stringify your data efficiently for the rest of your programs runtime. ;-)
+- **Fast Schema Validation**: Precompile the validator function once from your schema. Validate your data more efficiently for the rest of your programs runtime. (Still has some optimization potential though^^)
 - **Extensible**: Define custom types and error messages.
-- **Very Performant**: Hurrm, well... We need some benchmarks later^^
 
 # Usage
 Installation
@@ -36,12 +37,12 @@ Current Functionality
 
 ### Functions
 
-- `createValidator(schema, staticStrings)`: Returns a validator function.
-- `createStringifier(schema)`: Returns a stringifier function.
+- `validate(obj, schema, staticStrings)`: Direct validation of Object to schema.
+- `createValidator(schema, staticStrings)`: Returns a validator function which is ~30% faster then validate).
 - `getErrorMessage(errorCode)`: Returns the error message for a given code.
-- `defineNewType(validatorFunc, stringifyFunc)`: Adds a new type.
+- `defineNewType(validatorFunc)`: Adds a new type.
 - `defineNewError(errorMessage)`: Adds a new error code.
-- `setTypeFunctions(type, validatorFunc, stringifyFunc)`: Overrides typeValidator and typeStringifier for given type.
+- `setTypeValidator(type, validatorFunc)`: Overrides typeValidator for given type.
 - `lock()`: Freezes internal maps.
 
 ### 1. Basic Validation
@@ -93,18 +94,7 @@ if (error) {
 }
 ```
 
-### 2. Stringification
-
-Be sure that your object is valid. The stringifer does not validate the argument and might throw an exception if any unexpected issue occurs. The stringifier expects a valid data structure :-).
-
-```javascript
-const stringifyUser = createStringifier(userSchema);
-const userString = stringifyUser(userData);
-console.log(userString);
-// Output: '{"name":"Alice","age":30,"isAdmin":true,"tags":["user","admin"],"address":{"city":"Berlin","street":"Meinestrasse 666","country":"Deutschland"}}'
-```
-
-### 3. Special Cases
+### 2. Special Cases
 
 In some situations you want to have a 0 level schema. This is perfectly legal! :D
 
@@ -126,10 +116,10 @@ const validateUser = createValidator(userSchema, true);
 const error = validateUser({role:"user", name: "Max Mustermann"});
 ```
 
-### 4. Custom Types and Errors
-You have all the power to add your specific types or to overwrite the validators and stringifiers of any already given type as long as they are not `locked`.
+### 3. Custom Types and Errors
+You have all the power to add your specific types or to overwrite the validators of any already given type as long as the library is not `locked`.
 
-Notice that there has been an arbitrary limit of a maximum of 999 different types and 999 different errorCodes. This limit is very arbitrarily set to a number which is thought to never be reached.
+Notice that there has been set an arbitrary limit of a maximum of 999 different types and 999 different errorCodes. This limit is very arbitrarily set to a number which is thought to never be reached.
 
 ```javascript
 // Define a new error
@@ -142,10 +132,10 @@ const STRINGSIZED = defineNewType(
 );
 ```
 
-### 5. Locking the Library
+### 4. Locking the Library
 For a certain safety-net you may lock the library to prevent overwriting your configuration later.
 
-If you donot change any types you may simply call `lock()` immediately and start to compile your validators and stringifiers.
+If you donot change any types you may simply call `lock()` immediately and start to compile your validators.
 
 ```javascript
 lock(); // Prevents further mutations to types and errors
@@ -155,7 +145,7 @@ lock(); // Prevents further mutations to types and errors
 
 ## Default Types
 
-`thingy-schema-utils` provides a wide range of built-in types for common validation and stringification needs.
+`thingy-schema-utils` provides a wide range of built-in types for common validation needs.
 Here’s an extensive list of all available types:
 
 ---
@@ -219,6 +209,7 @@ They must exist but may be `null`
 
 ## Default ErrorCodes
 Remember that the definitions are enumerated so you might import `NOTANUMBER` and check against this specific errorCode for further decisions. But for simple human readable output the function `getErrorMessage(errorCode)` is the way to go.
+
 - `NOTASTRING` => "Not a String!"
 - `NOTANUMBER` => "Not a Number!"
 - `NOTABOOLEAN` => "Not a Boolean!"
@@ -239,9 +230,9 @@ Remember that the definitions are enumerated so you might import `NOTANUMBER` an
 
 # Further steps
 
-- Fix bugs
+- Further optimizations
 - Intruduce new types that seem useful
-
+- Fix any found Bugs/Issues
 
 All sorts of inputs are welcome, thanks!
 
