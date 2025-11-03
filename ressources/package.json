@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["schema", "validation", "stringification", "json-schema", "stringify", "validate", "thingy", "schema-compilation"],
+  "keywords": ["thingy", "schema", "validation", "stringification", "json-schema", "stringify", "validate", "schema-compilation", "JSON", "validator", "stringifier"],
   "author": "Lenard Frommelt lenard@frommelt.dev",
   "license": "CC0-1.0",
   "repository": {

@@ -1,8 +1,9 @@
 ############################################################
-#region debug
-import { createLogFunctions } from "thingy-debug"
-{log, olog} = createLogFunctions("schemamodule")
-#endregion
+# log = console.log
+# olog = (arg) -> console.log(JSON.stringify(arg, null, 4))
+
+############################################################
+#region Basic Schema Type Enumeration
 
 ############################################################
 ## Notice: NUMBER validation
@@ -11,69 +12,366 @@ import { createLogFunctions } from "thingy-debug"
 # Previously we had FINITENUMBER and NONANNUMBER 
 # These types are gone now :-)
 
+export BOOLEAN = 1
+export NUMBER = 2
+export ARRAY = 3
+export OBJECT = 4
+
+export STRING = 5
+export STRINGEMAIL = 6 
+export STRINGHEX = 7
+export STRINGHEX32 = 8
+export STRINGHEX64 = 9
+export STRINGHEX128 = 10
+export STRINGHEX256 = 11
+export STRINGHEX512 = 12
+
+export STRINGCLEAN = 13
+export NONEMPTYSTRING = 14
+export NONEMPTYSTRINGHEX = 15
+export NONEMPTYSTRINGCLEAN = 16
+export NONEMPTYARRAY = 17
+export OBJECTCLEAN = 18
+export NONNULLOBJECT = 19
+export NONNULLOBJECTCLEAN = 20
+
+
+export STRINGORNOTHING = 21
+export STRINGEMAILORNOTHING = 22
+export STRINGHEXORNOTHING = 23
+export STRINGHEX32ORNOTHING = 24
+export STRINGHEX64ORNOTHING = 25
+export STRINGHEX128ORNOTHING = 26
+export STRINGHEX256ORNOTHING = 27
+export STRINGHEX512ORNOTHING = 28
+export STRINGCLEANORNOTHING = 29
+export NUMBERORNOTHING = 30
+export BOOLEANORNOTHING = 31
+export ARRAYORNOTHING = 32
+export OBJECTORNOTHING = 33
+export OBJECTCLEANORNOTHING = 34
+
+export STRINGORNULL = 35
+export STRINGEMAILORNULL = 36
+export STRINGHEXORNULL = 37
+export STRINGHEX32ORNULL = 38
+export STRINGHEX64ORNULL = 39
+export STRINGHEX128ORNULL = 40
+export STRINGHEX256ORNULL = 41
+export STRINGHEX512ORNULL = 42
+export STRINGCLEANORNULL = 43 
+export NUMBERORNULL = 44
+export BOOLEANORNULL = 45
+export ARRAYORNULL = 46
+
+typeArraySize = 47
+
+#endregion
+
 ############################################################
-#region Schema Types and Functions
-export STRING = 1
-export STRINGEMAIL = 2 
-export STRINGHEX = 3
-export STRINGHEX32 = 4
-export STRINGHEX64 = 5
-export STRINGHEX128 = 6
-export STRINGHEX256 = 7
-export STRINGHEX512 = 8
-export NUMBER = 9
-export BOOLEAN = 10
-export ARRAY = 11
-export OBJECT = 12
-
-export STRINGORNOTHING = 13
-export STRINGEMAILORNOTHING = 14
-export STRINGHEXORNOTHING = 15
-export STRINGHEX32ORNOTHING = 16
-export STRINGHEX64ORNOTHING = 17
-export STRINGHEX128ORNOTHING = 18
-export STRINGHEX256ORNOTHING = 19
-export STRINGHEX512ORNOTHING = 20
-export NUMBERORNOTHING = 21
-export BOOLEANORNOTHING = 22
-export ARRAYORNOTHING = 23
-export OBJECTORNOTHING = 24
-
-export STRINGORNULL = 25
-export STRINGEMAILORNULL = 26
-export STRINGHEXORNULL = 27
-export STRINGHEX32ORNULL = 28
-export STRINGHEX64ORNULL = 29
-export STRINGHEX128ORNULL = 30
-export STRINGHEX256ORNULL = 31
-export STRINGHEX512ORNULL = 32
-export NUMBERORNULL = 33
-export BOOLEANORNULL = 34
-export ARRAYORNULL = 35
-
-export NONNULLOBJECT = 36
-export NONEMPTYSTRING = 37
-export NONEMPTYARRAY = 38
-export NONEMPTYSTRINGHEX = 39
-export NONEMPTYSTRINGCLEAN = 40
-export STRINGCLEAN = 41
-export STRINGCLEANORNULL = 42 
-export STRINGCLEANORNOTHING = 43
-export OBJECTCLEAN = 44
-export NONNULLOBJECTCLEAN = 45
-export OBJECTCLEANORNOTHING = 46
+#region Local Variables
+staticValidatorOrThrow = null
+locked = false
 
 ############################################################
-typeValidationFunctions = new Array(47)
-typeStringifyFunctions = new Array(47)
+numericOnlyRegex = /^\d+$/
+invalidEmailSmallRegex = /(\.\.|--|-\.)|\.-/
 
 ############################################################
-#region basic typeValidationFunctions definitions
-typeValidationFunctions[STRING] = (arg) ->
+hexChars = "0123456789abcdefABCDEF"
+hexMap = Object.create(null)
+hexMap[c] = true for c in hexChars
+# Object.freeze(hexMap) # creates minor performance penalty
+
+############################################################
+domainChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-."
+domainCharMap = Object.create(null)
+domainCharMap[c] = true for c in domainChars
+# Object.freeze(domainCharMap) # creates minor performance penalty
+
+############################################################
+dirtyChars = "\x00\x01\x02\x03\x04\x05\x06\x07\x08" +  # ASCII control 0–8
+    "\x0B\x0C" + # vertical tab, form feed
+    "\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F" + # rest of controls
+    "\x7F" +                                  # DEL
+    "\u00A0" +                                # non-breaking space
+    "\u1680" +                                # ogham space mark
+    "\u180E" +                                # mongolian vowel separator
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A" + # en/em/etc. spaces
+    "\u200B\u200C\u200D\u200E\u200F" +        # zero-width spaces, joiners, directional
+    "\u2028\u2029" +                          # line/paragraph separators
+    "\u202A\u202B\u202C\u202D\u202E" +        # embedding/override control
+    "\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069" + # invisible controls
+    "\u3000" +                                # ideographic space
+    "\uFEFF"; 
+dirtyCharMap = Object.create(null)
+dirtyCharMap[c] = true for c in dirtyChars
+# Object.freeze(dirtyCharMap) # creates minor performance penalty
+
+#endregion
+
+############################################################
+#region Local Functions
+
+############################################################
+isDirtyObject = (obj) ->
+    return if obj == null
+    ## as the inputs come from an object which was originalled paref from a JSON string we assume to not fall into an infinite loop
+    keys = Object.keys(obj)
+    for k in keys
+        if k == "__proto__" or k == "constructor" or k == "prototype"
+            return true
+        if typeof obj[k] == "object"
+            return true if isDirtyObject(obj[k])
+    return false
+
+############################################################
+createStaticStringValidator = (str) ->
+    return (arg) ->
+        if arg != str then return ISINVALID
+        return
+
+createThrower = (msg) ->
+    return () -> throw new Error(msg)
+
+############################################################
+#region Validator Creation Helpers
+getTypeValidator = (type) ->
+    fun = typeValidatorFunctions[type]
+    if !fun? then throw new Error("Unrecognized Schematype! (#{type})")
+    return fun
+
+############################################################
+getTypeValidatorsForArray = (arr) ->
+    funcs = new Array(arr.length)
+    
+    for el,i in arr
+        switch
+            when typeof el == "number" then funcs[i] = getTypeValidator(el)
+            when typeof el == "string" then funcs[i] = staticValidatorOrThrow(el)
+            when typeof el != "object" then throw new Error("Illegal #{typeof el}!")
+            when Array.isArray(el) 
+                funcs[i] = createArrayValidator(el)
+            else funcs[i] = createObjectValidator(el)
+
+    return funcs
+
+getValidatorEntriesForObject = (obj) ->
+    keys = Object.keys(obj)
+    entries = []
+    
+    for k,i in keys
+        prop = obj[k]
+        if typeof prop == "number"
+            entries.push([k, getTypeValidator(prop)])
+            continue
+        if typeof prop == "string"
+            entries.push([k, staticValidatorOrThrow(prop)])
+            continue
+        if typeof prop != "object" then throw new Error("Illegal #{typeof prop}!")
+        if Array.isArray(prop) then entries.push([k, createArrayValidator(prop)])
+        else entries.push([k, createObjectValidator(prop)])
+
+    return entries
+
+############################################################
+createArrayValidator = (arr) ->
+    if arr.length ==  0 then throw new Error("[] is illegal!")
+    funcs = getTypeValidatorsForArray(arr)
+    # olog valEntries
+    
+    func = (arg) ->
+        if !Array.isArray(arg) then return ISINVALID
+        hits = 0
+        for f,i in funcs
+            el = arg[i]
+            if el != undefined then hits++
+            err = f(el)
+            if err then return err
+        
+        if arg.length > hits then return ISINVALID
+        return
+
+    return func
+
+createObjectValidator = (obj) ->
+    # Obj is Schema Obj like obj = { prop1:STRING, prop2:NUMBER,... }
+    if obj == null then throw new Error("null is illegal!")
+    valEntries = getValidatorEntriesForObject(obj)
+    # olog valEntries
+    if valEntries.length == 0 then throw new Error("{} is illegal!")
+    
+    func = (arg) ->
+        # log "validating Object!"
+        # olog arg
+        # log "valEntries.length: #{valEntries.length}"
+        if typeof arg != "object" then return ISINVALID
+        if arg == null then return ISINVALID
+        hits = 0
+        for e in valEntries
+            # olog e
+            prop = arg[e[0]]
+            if prop != undefined then hits++
+            err = e[1](prop)
+            if err then return err
+        
+        keys = Object.keys(arg)
+        # log "arg keys Length: #{keys.length} -> hits: #{hits}"
+        if keys.length > hits then return ISINVALID
+        # log "is valid!"
+        return
+
+    return func
+
+#endregion
+
+############################################################
+#region Stringifier Creation Helpers
+getTypeStringifier = (type) ->
+    fun = typeStringifierFunctions[type]
+    if !fun? then throw new Error("Unrecognized Schematype! (#{type})")
+    return fun
+
+############################################################
+getTypeStringifiersForArray = (arr) ->
+    ts = new Array(arr.length) ## type stringifiers
+    
+    for el,i in arr
+        type = typeof el
+        if type == "number" then ts[i] = getTypeStringifier(el)
+        if type == "string" then ts[i] = getTypeStringifier(STRING)
+        if type != "object" then continue
+        if Array.isArray(el) then ts[i] = createArrayStringifier(el)
+        else ts[i] = createObjectStringifier(el)
+
+    return ts
+
+getStringifierEntriesForObject = (obj) ->
+    keys = Object.keys(obj)
+    ses = new Array(keys.length) # stringifier entries 
+    
+    for k,i in keys
+        prop = obj[k]
+        type = typeof prop
+        if type == "number" then ses[i] = [k, getTypeStringifier(prop)]
+        if type == "string" then ses[i] = [k, getTypeStringifier(STRING)]
+        if type != "object" then continue
+        if Array.isArray(prop)
+            sfes[i] = [k, createArrayStringifier(prop)] 
+        else ses[i] = [k, createObjectStringifier(prop)] 
+
+    return ses
+
+############################################################
+createArrayStringifier = (arr) ->
+    stringifyFunctions = getTypeStringifiersForArray(arr)
+    bufLen = stringifyFunctions.length
+    buffer = new Array(bufLen)
+
+    func = (arg) ->
+        ## stringify contents with predefined functions
+        buffer[i] = f(arg[i]) for f,i in stringifyFunctions
+
+        ## cut off undefined tail
+        while (buffer[buffer.length - 1] == undefined and buffer.length != 0)
+            buffer.pop()
+
+        ## fast return on no content
+        if buffer.length == 0
+            buffer.length = bufLen # restore original size
+            return '[]' 
+
+        # undefined within the array turns to 'null'
+        for s,i in buffer when s == undefined
+            buffer[i] = 'null'
+
+        str = '['+ buffer[0]
+        i = 1
+        str += ','+buffer[i++] while(i < buffer.length)
+        
+        buffer.length = bufLen # restore original size
+        str += ']'
+        return str 
+
+    return func
+
+createObjectStringifier = (obj) ->
+    sfEntries = getStringifierEntriesForObject(obj) # stringifer entries
+    bufLen = sfEntries.length
+    buffer = new Array(bufLen)
+
+    func = (arg) ->
+        buffer[i] = el[1](arg[el[0]]) for el,i in sfEntries 
+
+        # log "0"
+        str = '{'
+        i = 0
+        
+        while str.length == 1 and i < bufLen 
+            str += '"'+sfEntries[i][0]+'":'+buffer[i] if buffer[i]?
+            i++
+        
+        # log "1"
+        while i < bufLen
+            str += ',"'+sfEntries[i][0]+'":'+buffer[i] if buffer[i]?
+            i++
+
+        # log "2"
+        str += '}'
+        return str
+
+    return func
+
+#endregion
+
+############################################################
+#region Raw Type Stringifier Functions
+booleanStringify = (arg) ->
+    if arg  then return 'true' else return 'false'
+booleanOrNothingStringify = (arg) ->
+    return arg if arg == undefined 
+    if arg then return 'true'  else return 'false'
+booleanOrNullStringify = (arg) ->
+    return 'null' if arg == null
+    if arg then return 'true' else return 'false'
+numberStringify = (arg) -> ''+arg
+numberOrNothingStringify = (arg) -> 
+    if arg == undefined then return arg else return ''+arg
+numberOrNullStringify = (arg) ->
+    if arg == null then return 'null' else return ''+arg
+stringStringify = (arg) ->
+    if arg.length > 67 then return JSON.stringify(arg)
+    i = 0
+    while i < arg.length
+        code = arg.charCodeAt(i)
+        if (code < 93 and (code < 0x20 or code == 0x5c or code == 0x22))
+            return JSON.stringify(arg)
+        i++
+    return '"'+arg+'"'
+stringOrNothingStringify = (arg) ->
+    if arg == undefined then return arg else return stringStringify(arg)
+stringOrNullStringify = (arg) ->
+    if arg == null then return 'null' else return stringStringify(arg)
+objectStringify = JSON.stringify
+objectOrNothingStringify = (arg) ->
+    if arg == undefined then return arg else return JSON.stringify(arg)
+#TODO? maybe create specific Array Stringify function?
+
+#endregion
+
+#endregion
+
+############################################################
+#region Type Validator Functions
+typeValidatorFunctions = new Array(typeArraySize)
+
+############################################################
+#region Validator Functions For Basic Schema Types
+typeValidatorFunctions[STRING] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     return
 
-typeValidationFunctions[STRINGEMAIL] = (arg) ->
+typeValidatorFunctions[STRINGEMAIL] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length > 320 or arg.length < 5 then return INVALIDSIZE
     if invalidEmailSmallRegex.test(arg) then return INVALIDEMAIL
@@ -117,65 +415,65 @@ typeValidationFunctions[STRINGEMAIL] = (arg) ->
     if numericOnlyRegex.test(tld) then return INVALIDEMAIL
     return
 
-typeValidationFunctions[STRINGHEX] = (arg) ->
+typeValidatorFunctions[STRINGHEX] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX32] = (arg) ->
+typeValidatorFunctions[STRINGHEX32] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 32 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX64] = (arg) ->
+typeValidatorFunctions[STRINGHEX64] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 64 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX128] = (arg) ->
+typeValidatorFunctions[STRINGHEX128] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 128 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX256] = (arg) ->
+typeValidatorFunctions[STRINGHEX256] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 256 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX512] = (arg) ->
+typeValidatorFunctions[STRINGHEX512] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 512 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[NUMBER] = (arg) ->
+typeValidatorFunctions[NUMBER] = (arg) ->
     if typeof arg != "number" then return NOTANUMBER
-    if arg == NaN then return ISNAN 
+    if isNaN(arg) then return ISNAN 
     if arg == Infinity or arg == -Infinity then return ISNOTFINITE
     return
 
-typeValidationFunctions[BOOLEAN] = (arg) ->
+typeValidatorFunctions[BOOLEAN] = (arg) ->
     if typeof arg != "boolean" then return NOTABOOLEAN
     return
 
-typeValidationFunctions[ARRAY] = (arg) ->
+typeValidatorFunctions[ARRAY] = (arg) ->
     if !Array.isArray(arg) then return NOTANARRAY
     return
 
-typeValidationFunctions[OBJECT] = (arg) ->
+typeValidatorFunctions[OBJECT] = (arg) ->
     if typeof arg != "object" then return NOTANOBJECT
     return
 
-typeValidationFunctions[STRINGORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "string" then return NOTASTRING
     return
 
-typeValidationFunctions[STRINGEMAILORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGEMAILORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "string" then return NOTASTRING
     
@@ -221,75 +519,75 @@ typeValidationFunctions[STRINGEMAILORNOTHING] = (arg) ->
     if numericOnlyRegex.test(tld) then return INVALIDEMAIL
     return
 
-typeValidationFunctions[STRINGHEXORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGHEXORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX32ORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGHEX32ORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 32 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX64ORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGHEX64ORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 64 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX128ORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGHEX128ORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 128 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX256ORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGHEX256ORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 256 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX512ORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGHEX512ORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 512 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[NUMBERORNOTHING] = (arg) ->
+typeValidatorFunctions[NUMBERORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "number" then return NOTANUMBER
-    if arg == NaN then return ISNAN 
+    if isNaN(arg) then return ISNAN 
     if arg == Infinity or arg == -Infinity then return ISNOTFINITE
     return
 
-typeValidationFunctions[BOOLEANORNOTHING] = (arg) ->
+typeValidatorFunctions[BOOLEANORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "boolean" then return NOTABOOLEAN
     return
 
-typeValidationFunctions[ARRAYORNOTHING] = (arg) ->
+typeValidatorFunctions[ARRAYORNOTHING] = (arg) ->
     return if arg == undefined 
     if !Array.isArray(arg) then return NOTANARRAY
     return
 
-typeValidationFunctions[OBJECTORNOTHING] = (arg) ->
+typeValidatorFunctions[OBJECTORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "object" then return NOTANOBJECT
     return
 
-typeValidationFunctions[STRINGORNULL] = (arg) ->
+typeValidatorFunctions[STRINGORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     return
 
-typeValidationFunctions[STRINGEMAILORNULL] = (arg) ->
+typeValidatorFunctions[STRINGEMAILORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length > 320 or arg.length < 5 then return INVALIDSIZE
@@ -334,120 +632,120 @@ typeValidationFunctions[STRINGEMAILORNULL] = (arg) ->
     if numericOnlyRegex.test(tld) then return INVALIDEMAIL
     return
 
-typeValidationFunctions[STRINGHEXORNULL] = (arg) ->
+typeValidatorFunctions[STRINGHEXORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX32ORNULL] = (arg) ->
+typeValidatorFunctions[STRINGHEX32ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 32 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX64ORNULL] = (arg) ->
+typeValidatorFunctions[STRINGHEX64ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 64 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX128ORNULL] = (arg) ->
+typeValidatorFunctions[STRINGHEX128ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 128 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX256ORNULL] = (arg) ->
+typeValidatorFunctions[STRINGHEX256ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 256 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[STRINGHEX512ORNULL] = (arg) ->
+typeValidatorFunctions[STRINGHEX512ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 512 then return INVALIDSIZE
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[NUMBERORNULL] = (arg) ->
+typeValidatorFunctions[NUMBERORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "number" then return NOTANUMBER
-    if arg == NaN then return ISNAN 
+    if isNaN(arg) then return ISNAN 
     if arg == Infinity or arg == -Infinity then return ISNOTFINITE
     return
 
-typeValidationFunctions[BOOLEANORNULL] = (arg) ->
+typeValidatorFunctions[BOOLEANORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "boolean" then return NOTABOOLEAN
     return
 
-typeValidationFunctions[ARRAYORNULL] = (arg) ->
+typeValidatorFunctions[ARRAYORNULL] = (arg) ->
     return if arg == null
     if !Array.isArray(arg) then return NOTANARRAY
     return
 
-typeValidationFunctions[NONNULLOBJECT] = (arg) ->
+typeValidatorFunctions[NONNULLOBJECT] = (arg) ->
     if typeof arg != "object" then return NOTANOBJECT
     if arg == null then return ISNULL
     return
 
-typeValidationFunctions[NONEMPTYSTRING] = (arg) ->
+typeValidatorFunctions[NONEMPTYSTRING] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length == 0 then return ISEMPTYSTRING
     return
 
-typeValidationFunctions[NONEMPTYARRAY] = (arg) ->
+typeValidatorFunctions[NONEMPTYARRAY] = (arg) ->
     if !Array.isArray(arg) then return NOTANARRAY
     if arg.length == 0 then return ISEMPTYARRAY
     return
 
-typeValidationFunctions[NONEMPTYSTRINGHEX] = (arg) ->
+typeValidatorFunctions[NONEMPTYSTRINGHEX] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length == 0 then return ISEMPTYSTRING
     for c in arg when !hexMap[c] then return INVALIDHEX
     return
 
-typeValidationFunctions[NONEMPTYSTRINGCLEAN] = (arg) ->
+typeValidatorFunctions[NONEMPTYSTRINGCLEAN] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length == 0 then return ISEMPTYSTRING
     for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
     return
 
-typeValidationFunctions[STRINGCLEAN] = (arg) ->
+typeValidatorFunctions[STRINGCLEAN] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
     return
 
-typeValidationFunctions[STRINGCLEANORNULL] = (arg) ->
+typeValidatorFunctions[STRINGCLEANORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
     return
 
-typeValidationFunctions[STRINGCLEANORNOTHING] = (arg) ->
+typeValidatorFunctions[STRINGCLEANORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
     return
 
-typeValidationFunctions[OBJECTCLEAN] = (arg) ->
+typeValidatorFunctions[OBJECTCLEAN] = (arg) ->
     if typeof arg != "object" then return NOTANOBJECT
     if isDirtyObject(arg) then return ISDIRTYOBJECT
     return
 
-typeValidationFunctions[NONNULLOBJECTCLEAN] = (arg) ->
+typeValidatorFunctions[NONNULLOBJECTCLEAN] = (arg) ->
     if typeof arg != "object" then return NOTANOBJECT
     if arg == null then return ISNULL
     if isDirtyObject(arg) then return ISDIRTYOBJECT
     return
 
-typeValidationFunctions[OBJECTCLEANORNOTHING] = (arg) ->
+typeValidatorFunctions[OBJECTCLEANORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "object" then return NOTANOBJECT
     if isDirtyObject(arg) then return ISDIRTYOBJECT
@@ -455,85 +753,68 @@ typeValidationFunctions[OBJECTCLEANORNOTHING] = (arg) ->
 
 #endregion
 
-############################################################
-## raw type stringify 
-booleanStringify = (arg) -> 
-    if arg  then return 'true' else return 'false'
-booleanOrNothingStringify = (arg) ->
-    return arg if arg == undefined 
-    if arg then return 'true'  else return 'false'
-booleanOrNullStringify = (arg) ->
-    return 'null' if arg == null
-    if arg then return 'true' else return 'false'
-numberStringify = (arg) -> ''+arg
-numberOrNothingStringify = (arg) -> 
-    if arg == undefined then return arg else return ''+arg
-numberOrNullStringify = (arg) -> 
-    if arg == null then return 'null' else return ''+arg
-stringStringify = (arg) -> '"'+arg+'"'
-stringOrNothingStringify = (arg) ->
-    if arg == undefined then return arg else return '"'+arg+'"'
-stringOrNullStringify = (arg) ->
-    if arg == null then return 'null' else return '"'+arg+'"'
-objectStringify = JSON.stringify
-objectOrNothingStringify = (arg) -> 
-    if arg == undefined then return arg else return JSON.stringify(arg)
+#endregion
 
 ############################################################
-#region basic typeStringifyFunction definitions
-typeStringifyFunctions[STRING] = stringStringify
-typeStringifyFunctions[STRINGEMAIL] = stringStringify
-typeStringifyFunctions[STRINGHEX] = stringStringify
-typeStringifyFunctions[STRINGHEX32] = stringStringify
-typeStringifyFunctions[STRINGHEX64] = stringStringify
-typeStringifyFunctions[STRINGHEX128] = stringStringify
-typeStringifyFunctions[STRINGHEX256] = stringStringify
-typeStringifyFunctions[STRINGHEX512] = stringStringify
-typeStringifyFunctions[NUMBER] = numberStringify
-typeStringifyFunctions[BOOLEAN] = booleanStringify
-typeStringifyFunctions[ARRAY] = objectStringify
-typeStringifyFunctions[OBJECT] = objectStringify
-typeStringifyFunctions[STRINGORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGEMAILORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGHEXORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGHEX32ORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGHEX64ORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGHEX128ORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGHEX256ORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[STRINGHEX512ORNOTHING] = stringOrNothingStringify
-typeStringifyFunctions[NUMBERORNOTHING] = numberOrNothingStringify
-typeStringifyFunctions[BOOLEANORNOTHING] = booleanOrNothingStringify
-typeStringifyFunctions[ARRAYORNOTHING] = objectOrNothingStringify
-typeStringifyFunctions[OBJECTORNOTHING] = objectOrNothingStringify
-typeStringifyFunctions[STRINGORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGEMAILORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGHEXORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGHEX32ORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGHEX64ORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGHEX128ORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGHEX256ORNULL] = stringOrNullStringify
-typeStringifyFunctions[STRINGHEX512ORNULL] = stringOrNullStringify
-typeStringifyFunctions[NUMBERORNULL] = numberOrNullStringify
-typeStringifyFunctions[BOOLEANORNULL] = booleanOrNullStringify
-typeStringifyFunctions[ARRAYORNULL] = objectStringify
-typeStringifyFunctions[NONNULLOBJECT] =  objectStringify 
-typeStringifyFunctions[NONEMPTYSTRING] = stringStringify
-typeStringifyFunctions[NONEMPTYARRAY] = objectStringify
-typeStringifyFunctions[NONEMPTYSTRINGHEX] = stringStringify
-typeStringifyFunctions[NONEMPTYSTRINGCLEAN] = stringStringify
-typeStringifyFunctions[STRINGCLEAN] = stringStringify
-typeStringifyFunctions[STRINGCLEANORNULL] = stringStringify
-typeStringifyFunctions[STRINGCLEANORNOTHING] = stringStringify
-typeStringifyFunctions[OBJECTCLEAN] = objectStringify
-typeStringifyFunctions[NONNULLOBJECTCLEAN] = objectStringify
-typeStringifyFunctions[OBJECTCLEANORNOTHING] = objectStringify
+#region Stringifier Functions
+typeStringifierFunctions = new Array(typeArraySize)
+
+############################################################
+#region Stringify Functions for Schema Types
+typeStringifierFunctions[STRING] = stringStringify
+typeStringifierFunctions[STRINGEMAIL] = stringStringify
+typeStringifierFunctions[STRINGHEX] = stringStringify
+typeStringifierFunctions[STRINGHEX32] = stringStringify
+typeStringifierFunctions[STRINGHEX64] = stringStringify
+typeStringifierFunctions[STRINGHEX128] = stringStringify
+typeStringifierFunctions[STRINGHEX256] = stringStringify
+typeStringifierFunctions[STRINGHEX512] = stringStringify
+typeStringifierFunctions[NUMBER] = numberStringify
+typeStringifierFunctions[BOOLEAN] = booleanStringify
+typeStringifierFunctions[ARRAY] = objectStringify
+typeStringifierFunctions[OBJECT] = objectStringify
+typeStringifierFunctions[STRINGORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGEMAILORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGHEXORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGHEX32ORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGHEX64ORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGHEX128ORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGHEX256ORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[STRINGHEX512ORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[NUMBERORNOTHING] = numberOrNothingStringify
+typeStringifierFunctions[BOOLEANORNOTHING] = booleanOrNothingStringify
+typeStringifierFunctions[ARRAYORNOTHING] = objectOrNothingStringify
+typeStringifierFunctions[OBJECTORNOTHING] = objectOrNothingStringify
+typeStringifierFunctions[STRINGORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGEMAILORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGHEXORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGHEX32ORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGHEX64ORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGHEX128ORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGHEX256ORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGHEX512ORNULL] = stringOrNullStringify
+typeStringifierFunctions[NUMBERORNULL] = numberOrNullStringify
+typeStringifierFunctions[BOOLEANORNULL] = booleanOrNullStringify
+typeStringifierFunctions[ARRAYORNULL] = objectStringify
+typeStringifierFunctions[NONNULLOBJECT] =  objectStringify 
+typeStringifierFunctions[NONEMPTYSTRING] = stringStringify
+typeStringifierFunctions[NONEMPTYARRAY] = objectStringify
+typeStringifierFunctions[NONEMPTYSTRINGHEX] = stringStringify
+typeStringifierFunctions[NONEMPTYSTRINGCLEAN] = stringStringify
+typeStringifierFunctions[STRINGCLEAN] = stringStringify
+typeStringifierFunctions[STRINGCLEANORNULL] = stringOrNullStringify
+typeStringifierFunctions[STRINGCLEANORNOTHING] = stringOrNothingStringify
+typeStringifierFunctions[OBJECTCLEAN] = objectStringify
+typeStringifierFunctions[NONNULLOBJECTCLEAN] = objectStringify
+typeStringifierFunctions[OBJECTCLEANORNOTHING] = objectStringify
 
 #endregion
 
 #endregion
 
+
 ############################################################
-#region Error Codes
+#region Error Codes and Messages
 export NOTASTRING = 1000
 export NOTANUMBER = 1001
 export NOTABOOLEAN = 1002
@@ -555,7 +836,7 @@ export ISNOTFINITE = 1014
 
 
 export ISINVALID = 2222
-
+# export THISERROR = 2223
 
 ############################################################
 ErrorToMessage = Object.create(null)
@@ -574,289 +855,46 @@ ErrorToMessage[ISEMPTYSTRING] = "String is empty!"
 ErrorToMessage[ISEMPTYARRAY] = "Array is empty!"
 ErrorToMessage[ISDIRTYSTRING] = "String is dirty!"
 ErrorToMessage[ISDIRTYOBJECT] = "Object is dirty!"
-ErrorToMessage[ISNOTFINITE] = "Number is infinity!"
-ErrorToMessage[ISINVALID] = "Schema is invalid!"
+ErrorToMessage[ISNOTFINITE] = "Number is not finite!"
+ErrorToMessage[ISINVALID] = "Is invalid!"
+# ErrorToMessage[THISERROR] = "This was the Error!"
 #endregion
 
 ############################################################
-#region Helpers
-############################################################
-isDirtyObject = (obj) ->
-    return if obj == null
-    ## as the inputs come from an object which was originalled paref from a JSON string we assume to not fall into an infinite loop
-    keys = Object.keys(obj)
-    for k in keys
-        if k == "__proto__" or k == "constructor" or k == "prototype"
-            return true
-        if typeof obj[k] == "object"
-            return true if isDirtyObject(obj[k])
-    return false
+#region API = exports
 
-############################################################
-stringVerificationFunction = (str) ->
-    return (arg) ->
-        if arg != str then return ISINVALID
-        return
+export validate = (obj, schema, staticStrings) ->
+    if staticStrings == true
+        staticValidatorOrThrow = createStaticStringValidator
+    else staticValidatorOrThrow = createThrower("Static string!")
 
-############################################################
-stringifyFunction = (type) ->
-    fun = typeStringifyFunctions[type]
-    if !fun? then throw new Error("Unrecognized Schematype! (#{type})")
-    return fun
-
-############################################################
-validationFunction = (type) ->
-    fun = typeValidationFunctions[type]
-    if !fun? then throw new Error("Unrecognized Schematype! (#{type})")
-    return fun
-
-############################################################
-createValidationFunctionForArray = (arr) ->
-    if arr.length ==  0 then throw new Error("[] is illegal!")
-    funcs = getValidationFunctionsForArray(arr)
-    # olog valEntries
-    
-    func = (arg) ->
-        if !Array.isArray(arg) then return ISINVALID
-        hits = 0
-        for f,i in funcs
-            el = arg[i]
-            if el? then hits++
-            err = f(el)
-            if err then return err
-        
-        if arg.length > hits then return ISINVALID
-        return
-
-    return func
-
-createValidationFunctionForObject = (obj) ->
-    # Obj is Schema Obj like obj = { prop1:STRING, prop2:NUMBER,... }
-    if obj == null then throw new Error("null is illegal!")
-    valEntries = getValidationEntriesForObject(obj)
-    # olog valEntries
-    if valEntries.length == 0 then throw new Error("{} is illegal!")
-    
-    func = (arg) ->
-        # log "validating Object!"
-        # olog arg
-        if typeof arg != "object" then return ISINVALID
-        if arg == null then return ISINVALID
-        hits = 0
-        for e in valEntries
-            # olog e
-            prop = arg[e[0]]
-            if prop? then hits++
-            err = e[1](prop)
-            if err then return err
-        
-        keys = Object.keys(arg)
-        if keys.length > hits then return ISINVALID
-        # log "is valid!"
-        return
-
-    return func
-
-############################################################
-getValidationFunctionsForArray = (arr) ->
-    funcs = new Array(arr.length)
-    
-    for el,i in arr
-        switch
-            when typeof el == "number" then funcs[i] = validationFunction(el)
-            when typeof el == "string" then funcs[i] = onString(el)
-            when typeof el != "object" then throw new Error("Illegal #{typeof el}!")
-            when Array.isArray(el) 
-                funcs[i] = createValidationFunctionForArray(el)
-            else funcs[i] = createValidationFunctionForObject(el)
-
-    return funcs
-
-getValidationEntriesForObject = (obj) ->
-    keys = Object.keys(obj)
-    valEntries = []
-    
-    for k,i in keys
-        prop = obj[k]
-        if typeof prop == "number"
-            valEntries.push([k, validationFunction(prop)])
-            continue
-        if typeof prop == "string"
-            valEntries.push([k, onString(prop)])
-            continue
-        if typeof prop != "object" then throw new Error("Illegal #{typeof prop}!")
-        if Array.isArray(prop)
-            valFunc = createValidationFunctionForArray(prop)
-            valEntries.push([k, valFunc])
-        else 
-            valFunc = createValidationFunctionForObject(prop)
-            valEntries.push([k, valFunc])
-
-    return valEntries
-
-############################################################
-createStringifyFunctionForArray = (arr) ->
-    stringifyFunctions = getStringifyFunctionsForArray(arr)
-    bufLen = stringifyFunctions.length
-    buffer = new Array(bufLen)
-
-    func = (arg) ->
-        ## stringify contents with predefined functions
-        buffer[i] = f(arg[i]) for f,i in stringifyFunctions
-
-        ## cut off undefined tail
-        while (buffer[buffer.length - 1] == undefined and buffer.length != 0)
-            buffer.pop()
-
-        ## fast return on no content
-        if buffer.length == 0
-            buffer.length = bufLen # restore original size
-            return '[]' 
-
-        # undefined within the array turns to 'null'
-        for s,i in buffer when s == undefined
-            buffer[i] = 'null'
-
-        str = '['+ buffer[0]
-        i = 1
-        str += ','+buffer[i++] while(i < buffer.length)
-        
-        buffer.length = bufLen # restore original size
-        str += ']'
-        return str 
-
-    return func
-
-createStringifyFunctionForObject = (obj) ->
-    sfEntries = getStringifyFunctionsForObject(obj) # stringify function entries
-    bufLen = sfEntries.length
-    buffer = new Array(bufLen)
-
-    func = (arg) ->
-        buffer[i] = el[1](arg[el[0]]) for el,i in sfEntries 
-
-        # log "0"
-        str = '{'
-        i = 0
-        
-        while str.length == 1 and i < bufLen 
-            str += '"'+sfEntries[i][0]+'":'+buffer[i] if buffer[i]?
-            i++
-        
-        # log "1"
-        while i < bufLen
-            str += ',"'+sfEntries[i][0]+'":'+buffer[i] if buffer[i]?
-            i++
-
-        # log "2"
-        str += '}'
-        return str
-
-    return func
-
-############################################################
-getStringifyFunctionsForArray = (arr) ->
-    sfs = new Array(arr.length) ## stringify functions
-    
-    for el,i in arr
-        type = typeof el
-        if type == "number" then sfs[i] = stringifyFunction(el)
-        if type == "string" then sfs[i] = stringifyFunction(STRING)
-        if type != "object" then continue
-        if Array.isArray(el) then sfs[i] = createStringifyFunctionForArray(el)
-        else sfs[i] = createStringifyFunctionForObject(el)
-
-    return sfs
-
-getStringifyFunctionsForObject = (obj) ->
-    keys = Object.keys(obj)
-    sfes = new Array(keys.length) # stringify function entries 
-    
-    for k,i in keys
-        prop = obj[k]
-        type = typeof prop
-        if type == "number" then sfes[i] = [k, stringifyFunction(prop)]
-        if type == "string" then sfes[i] = [k, stringifyFunction(STRING)]
-        if type != "object" then continue
-        if Array.isArray(prop)
-            sfes[i] = [k, createStringifyFunctionForArray(prop)] 
-        else sfes[i] = [k, createStringifyFunctionForObject(prop)] 
-
-    return sfes
-
-
-#endregion
-
-############################################################
-#region local Variables
-onString = null
-locked = false
-
-############################################################
-numericOnlyRegex = /^\d+$/
-invalidEmailSmallRegex = /(\.\.|--|-\.)|\.-/
-
-############################################################
-hexChars = "0123456789abcdefABCDEF"
-hexMap = Object.create(null)
-hexMap[c] = true for c in hexChars
-# Object.freeze(hexMap)
-
-############################################################
-domainChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-."
-domainCharMap = Object.create(null)
-domainCharMap[c] = true for c in domainChars
-# Object.freeze(domainCharMap)
-
-############################################################
-dirtyChars = "\x00\x01\x02\x03\x04\x05\x06\x07\x08" +  # ASCII control 0–8
-    "\x0B\x0C" + # vertical tab, form feed
-    "\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F" + # rest of controls
-    "\x7F" +                                  # DEL
-    "\u00A0" +                                # non-breaking space
-    "\u1680" +                                # ogham space mark
-    "\u180E" +                                # mongolian vowel separator
-    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A" + # en/em/etc. spaces
-    "\u200B\u200C\u200D\u200E\u200F" +        # zero-width spaces, joiners, directional
-    "\u2028\u2029" +                          # line/paragraph separators
-    "\u202A\u202B\u202C\u202D\u202E" +        # embedding/override control
-    "\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069" + # invisible controls
-    "\u3000" +                                # ideographic space
-    "\uFEFF"; 
-dirtyCharMap = Object.create(null)
-dirtyCharMap[c] = true for c in dirtyChars
-# Object.freeze(dirtyCharMap)
-
-#endregion
-
-############################################################
-## takes your schema
-## returns the stringifier function
-export createStringifier = (schema) ->
     type = typeof schema
 
-    if type == "number" then return stringifyFunction(schema) 
-    if type == "string" then return stringifyFunction(STRING)
-    if Array.isArray(schema) then return createStringifyFunctionForArray(schema)
-    else return createStringifyFunctionForObject(schema)
+    if type == "number" then return getTypeValidator(schema)(obj)
+    if type == "string" then return staticValidatorOrThrow(schema)(obj)
+    if type != "object" then throw new Error("Illegal #{typeof schema}!")
+    if Array.isArray(schema) then return createArrayValidator(schema)(obj)
+    else return createObjectValidator(schema)(obj)
 
 ############################################################
 ## takes schema and optional boolean staticStrings
 ##    a truthy staticStrings allows you to put static 
-##    strings into your schema like {userInpput: STRING, publicAccess: "onlywithexactlythisstring"}
+##    strings into your schema like: 
+##    {userInpput: STRING, publicAccess: "onlywithexactlythisstring"}
 ## returns the validator function
 export createValidator = (schema, staticStrings) ->
     
-    if staticStrings then onString = stringVerificationFunction
-    else onString = (schema) -> throw new Error("Illegal string!")
+    if staticStrings == true
+        staticValidatorOrThrow = createStaticStringValidator
+    else staticValidatorOrThrow = createThrower("Static string!")
 
     type = typeof schema
 
-    if type == "number" then return validationFunction(schema)
-    if type == "string" then return onString(schema)
+    if type == "number" then return getTypeValidator(schema)
+    if type == "string" then return staticValidatorOrThrow(schema)
     if type != "object" then throw new Error("Illegal #{typeof schema}!")
-    if Array.isArray(schema) then return createValidationFunctionForArray(schema)
-    else return createValidationFunctionForObject(schema)
+    if Array.isArray(schema) then return createArrayValidator(schema)
+    else return createObjectValidator(schema)
 
 ############################################################
 ## takes errorcode
@@ -867,15 +905,15 @@ export getErrorMessage = (errorCode) ->
     else return msg
 
 ############################################################
-## takes a validatorFunction and stringifyFunction
+## takes a validatorFunction and getTypeStringifier
 ##    this function cannot overwrite predefined types 
 ## returns the new enumeration number for the defined Type
 export defineNewType = (validatorFunc, stringifyFunc) ->
     if locked then throw new Error("We are closed!")    
-    newTypeId = typeValidationFunctions.length
+    newTypeId = typeValidatorFunctions.length
     if newTypeId >= 1000 then throw new Error("Exeeding type limit!")
-    typeValidationFunctions[newTypeId] = validatorFunc
-    typeStringifyFunctions[newTypeId] = stringifyFunc
+    typeValidatorFunctions[newTypeId] = validatorFunc
+    typeStringifierFunctions[newTypeId] = stringifyFunc
     return newTypeId
 
 ############################################################
@@ -897,7 +935,7 @@ export defineNewError = (errorMessage) ->
 export setTypeFunctions = (type, valiatorFunc, stringifyFunc) ->
     if locked then throw new Error("We are closed!")
     if typeof type != "number" then throw new Error("type is not a Number!")
-    if type >= typeValidationFunctions.length or type < 1 
+    if type >= typeValidatorFunctions.length or type < 1 
         throw new Error("Type does not exist!")
     
     if valiatorFunc?  and typeof valiatorFunc  != "function" 
@@ -905,18 +943,20 @@ export setTypeFunctions = (type, valiatorFunc, stringifyFunc) ->
     if stringifyFunc? and typeof stringifyFunc  != "function" 
         throw new Error("stringifyFunc is not a Function!")
 
-    if validatorFunction? then typeValidationFunctions[type] = validatorFunc
-    else typeValidationFunctions[type] = () -> return
+    if validatorFunction? then typeValidatorFunctions[type] = validatorFunc
+    else typeValidatorFunctions[type] = () -> return
 
-    if stringifyFunc? then typeStringifyFunctions[type] = stringifyFunc
-    else typeStringifyFunctions[type] = () -> ""
+    if stringifyFunc? then typeStringifierFunctions[type] = stringifyFunc
+    else typeStringifierFunctions[type] = () -> ""
     return 
 
 ############################################################
 ## locks/freezes all internal maps no mutation after this!
 export lock = ->
     locked = true
-    Object.freeze(typeValidationFunctions)
-    Object.freeze(typeStringifyFunctions)
+    Object.freeze(typeValidatorFunctions)
+    Object.freeze(typeStringifierFunctions)
     Object.freeze(ErrorToMessage)
     return
+
+#endregion
