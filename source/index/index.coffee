@@ -79,33 +79,40 @@ invalidEmailSmallRegex = /(\.\.|--|-\.)|\.-/
 
 ############################################################
 hexChars = "0123456789abcdefABCDEF"
-hexMap = Object.create(null)
-hexMap[c] = true for c in hexChars
+hexMap = new Array(103)
+i = 0
+while(i < hexChars.length)
+    hexMap[hexChars.charCodeAt(i)] = true
+    i++
 # Object.freeze(hexMap) # creates minor performance penalty
 
 ############################################################
 domainChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-."
-domainCharMap = Object.create(null)
-domainCharMap[c] = true for c in domainChars
+domainCharMap = new Array(123)
+i = 0
+while(i < domainChars.length)
+    domainCharMap[domainChars.charCodeAt(i)] = true
+    i++
 # Object.freeze(domainCharMap) # creates minor performance penalty
 
+
 ############################################################
-dirtyChars = "\x00\x01\x02\x03\x04\x05\x06\x07\x08" +  # ASCII control 0–8
-    "\x0B\x0C" + # vertical tab, form feed
-    "\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F" + # rest of controls
-    "\x7F" +                                  # DEL
-    "\u00A0" +                                # non-breaking space
-    "\u1680" +                                # ogham space mark
-    "\u180E" +                                # mongolian vowel separator
-    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A" + # en/em/etc. spaces
-    "\u200B\u200C\u200D\u200E\u200F" +        # zero-width spaces, joiners, directional
-    "\u2028\u2029" +                          # line/paragraph separators
-    "\u202A\u202B\u202C\u202D\u202E" +        # embedding/override control
-    "\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069" + # invisible controls
-    "\u3000" +                                # ideographic space
-    "\uFEFF"; 
-dirtyCharMap = Object.create(null)
-dirtyCharMap[c] = true for c in dirtyChars
+# \t = \x09 Horizontal Tab -> not dirty :-) 
+# \n = \x0A Line Feed -> not dirty :-)
+# PAD = \x80 Padding Character -> not dirty :-)
+# NEL = \x85 Next Line -> not dirty :-)
+
+dirtyChars = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0D\x0E\x0F" +  # C0 controls
+    "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F" +  
+    "\x7F" +
+    "\x81\x82\x83\x84\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F" + #C1 controls
+    "\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F"
+# all chars > \u02ff will be cut off manually 
+dirtyCharMap = new Array(160)
+i = 0
+while(i < dirtyChars.length)
+    dirtyCharMap[dirtyChars.charCodeAt(i)] = true
+    i++
 # Object.freeze(dirtyCharMap) # creates minor performance penalty
 
 #endregion
@@ -185,7 +192,7 @@ createArrayValidator = (arr) ->
         hits = 0
         for f,i in funcs
             el = arg[i]
-            if el != undefined then hits++
+            if !(el == undefined) then hits++
             err = f(el)
             if err then return err
         
@@ -211,7 +218,7 @@ createObjectValidator = (obj) ->
         for e in valEntries
             # olog e
             prop = arg[e[0]]
-            if prop != undefined then hits++
+            if !(prop == undefined) then hits++
             err = e[1](prop)
             if err then return err
         
@@ -261,7 +268,7 @@ typeValidatorFunctions[STRINGEMAIL] = (arg) ->
     # if arg[atPos + 1] == "." or arg[atPos + 1] == "-" then return INVALIDEMAIL
     
     for c,i in arg
-        if !(domainCharMap[c] or i == atPos or
+        if !(domainCharMap[arg.charCodeAt(i)] or i == atPos or
             (i < atPos and (c == "+" or c == "_"))
             ) then return INVALIDEMAIL
     
@@ -283,37 +290,61 @@ typeValidatorFunctions[STRINGEMAIL] = (arg) ->
 
 typeValidatorFunctions[STRINGHEX] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX32] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 32 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX64] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 64 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX128] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 128 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX256] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 256 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX512] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 512 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[NUMBER] = (arg) ->
@@ -365,7 +396,7 @@ typeValidatorFunctions[STRINGEMAILORNOTHING] = (arg) ->
     # if arg[atPos + 1] == "." or arg[atPos + 1] == "-" then return INVALIDEMAIL
     
     for c,i in arg 
-        if !(domainCharMap[c] or i == atPos or
+        if !(domainCharMap[arg.charCodeAt(i)] or i == atPos or
             (i < atPos and (c == "+" or c == "_"))
             ) then return INVALIDEMAIL
     
@@ -388,42 +419,66 @@ typeValidatorFunctions[STRINGEMAILORNOTHING] = (arg) ->
 typeValidatorFunctions[STRINGHEXORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX32ORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 32 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX64ORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 64 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX128ORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 128 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX256ORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 256 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX512ORNOTHING] = (arg) ->
     return if arg == undefined 
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 512 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[NUMBERORNOTHING] = (arg) ->
@@ -478,7 +533,7 @@ typeValidatorFunctions[STRINGEMAILORNULL] = (arg) ->
     # if arg[atPos + 1] == "." or arg[atPos + 1] == "-" then return INVALIDEMAIL
     
     for c,i in arg 
-        if !(domainCharMap[c] or i == atPos or
+        if !(domainCharMap[arg.charCodeAt(i)] or i == atPos or
             (i < atPos and (c == "+" or c == "_"))
             ) then return INVALIDEMAIL
     
@@ -501,42 +556,66 @@ typeValidatorFunctions[STRINGEMAILORNULL] = (arg) ->
 typeValidatorFunctions[STRINGHEXORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX32ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 32 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX64ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 64 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX128ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 128 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX256ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 256 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[STRINGHEX512ORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
     if arg.length != 512 then return INVALIDSIZE
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[NUMBERORNULL] = (arg) ->
@@ -574,30 +653,54 @@ typeValidatorFunctions[NONEMPTYARRAY] = (arg) ->
 typeValidatorFunctions[NONEMPTYSTRINGHEX] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length == 0 then return ISEMPTYSTRING
-    for c in arg when !hexMap[c] then return INVALIDHEX
+    i = 0
+    while i < arg.length
+        if hexMap[arg.charCodeAt(i)] == undefined 
+            return INVALIDHEX
+        i++
     return
 
 typeValidatorFunctions[NONEMPTYSTRINGCLEAN] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
     if arg.length == 0 then return ISEMPTYSTRING
-    for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
+    i = 0
+    while i < arg.length
+        code = arg.charCodeAt(i)
+        if code > 0x2ff or dirtyCharMap[code]
+            return ISDIRTYSTRING
+        i++
     return
 
 typeValidatorFunctions[STRINGCLEAN] = (arg) ->
     if typeof arg != "string" then return NOTASTRING
-    for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
+    i = 0
+    while i < arg.length
+        code = arg.charCodeAt(i)
+        if code > 0x2ff or dirtyCharMap[code]
+            return ISDIRTYSTRING
+        i++
     return
 
 typeValidatorFunctions[STRINGCLEANORNULL] = (arg) ->
     return if arg == null
     if typeof arg != "string" then return NOTASTRING
-    for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
+    i = 0
+    while i < arg.length
+        code = arg.charCodeAt(i)
+        if code > 0x2ff or dirtyCharMap[code]
+            return ISDIRTYSTRING
+        i++
     return
 
 typeValidatorFunctions[STRINGCLEANORNOTHING] = (arg) ->
     return if arg == undefined
     if typeof arg != "string" then return NOTASTRING
-    for c in arg when dirtyCharMap[c] then return ISDIRTYSTRING
+    i = 0
+    while i < arg.length
+        code = arg.charCodeAt(i)
+        if code > 0x2ff or dirtyCharMap[code]
+            return ISDIRTYSTRING
+        i++
     return
 
 typeValidatorFunctions[OBJECTCLEAN] = (arg) ->
